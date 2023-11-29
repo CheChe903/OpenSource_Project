@@ -112,6 +112,7 @@ def main():
             screen.blit(final_score_text, (MAX_WIDTH // 2 - 60, MAX_HEIGHT // 2-10))
             restart_text = font.render("If you want RESTART, Press SpaceBar!", True, (255,0,0))
             screen.blit(restart_text, (MAX_WIDTH // 2-170, MAX_HEIGHT // 2+20))
+            
             # 게임 오버 상태에서의 이벤트 처리
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
