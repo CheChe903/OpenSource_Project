@@ -3,14 +3,22 @@
 import pygame
 import sys
 import pygame.font
+from time import sleep
 # step1 : set screen, fps
 # step2 : show dino, jump dino
 # step3 : show tree, move tree
 
 pygame.init()
 pygame.display.set_caption('Jumping dino')
-pygame.font.init()  # 폰트 초기화 (필요한 경우)
-font = pygame.font.SysFont("Courier New", 20)
+pygame.font.init()
+
+# 폰트 파일 경로
+font_path = './font/PressStart2P-Regular.ttf'
+
+# 폰트 객체 생성
+font_size = 20  # 원하는 폰트 크기
+font = pygame.font.Font(font_path, font_size)
+
 MAX_WIDTH = 800
 MAX_HEIGHT = 400
 
@@ -49,7 +57,8 @@ def main():
     tree_rect = imgTree.get_rect()  # 나무의 충돌 영역
     tree_rect.width -= 20 
     tree_rect.height -= 10  
-
+    dino_rect.width -= 20 
+    dino_rect.height -= 10  
     # 게임 상태 변수
     game_active = True  # 게임이 활성 상태인지 표시
 
@@ -60,7 +69,7 @@ def main():
             # 점수 증가
             score += 1
             score_text = font.render(f"Score: {score}", True, (0, 0, 0))
-            screen.blit(score_text, (MAX_WIDTH - 150, 20))
+            screen.blit(score_text, (MAX_WIDTH - 220, 20))
 
             # 충돌 영역 업데이트
             dino_rect.x = dino_x
@@ -72,7 +81,7 @@ def main():
             if dino_rect.colliderect(tree_rect):
                 screen.blit(imgDino3, (dino_x, dino_y))  # 충돌 시 이미지 변경
                 pygame.display.update()  # 변경된 이미지 업데이트
-                pygame.time.delay(2000)
+                sleep(2)
                 game_active = False
 
             # 이벤트 체크 및 점프 처리
@@ -115,11 +124,11 @@ def main():
         else:
             # 게임 오버 화면 및 점수 표시
             game_over_text = font.render("Game Over", True, (0, 0, 0))
-            screen.blit(game_over_text, (MAX_WIDTH // 2 - 50, MAX_HEIGHT // 2-40))
+            screen.blit(game_over_text, (MAX_WIDTH // 2 - 80, MAX_HEIGHT // 2-40))
             final_score_text = font.render(f"Final Score: {score}", True, (0, 0, 0))
-            screen.blit(final_score_text, (MAX_WIDTH // 2 - 60, MAX_HEIGHT // 2-10))
+            screen.blit(final_score_text, (MAX_WIDTH // 2 - 120, MAX_HEIGHT // 2-10))
             restart_text = font.render("If you want RESTART, Press R!", True, (255,0,0))
-            screen.blit(restart_text, (MAX_WIDTH // 2-170, MAX_HEIGHT // 2+20))
+            screen.blit(restart_text, (MAX_WIDTH // 2-270, MAX_HEIGHT // 2+20))
             
             # 게임 오버 상태에서의 이벤트 처리
             for event in pygame.event.get():
