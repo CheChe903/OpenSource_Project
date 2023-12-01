@@ -23,6 +23,10 @@ def main():
     # dino
     imgDino1 = pygame.image.load('images/dino1.png')
     imgDino2 = pygame.image.load('images/dino2.png')
+    imgDino3 = pygame.image.load('images/dinodie.png')
+    imgDino1= pygame.transform.scale(imgDino1, (imgDino1.get_width()*3, imgDino1.get_height()*3))
+    imgDino2= pygame.transform.scale(imgDino2, (imgDino2.get_width()*3, imgDino2.get_height()*3))
+    imgDino3= pygame.transform.scale(imgDino3, (imgDino3.get_width()*3, imgDino3.get_height()*3))
     dino_height = imgDino1.get_size()[1]
     dino_bottom = MAX_HEIGHT - dino_height
     dino_x = 50
@@ -43,7 +47,8 @@ def main():
     score = 0
     dino_rect = imgDino1.get_rect()  # 공룡의 충돌 영역
     tree_rect = imgTree.get_rect()  # 나무의 충돌 영역
-
+    tree_rect.width -= 20 
+    tree_rect.height -= 10  
 
     # 게임 상태 변수
     game_active = True  # 게임이 활성 상태인지 표시
@@ -65,6 +70,9 @@ def main():
 
             # 충돌 감지
             if dino_rect.colliderect(tree_rect):
+                screen.blit(imgDino3, (dino_x, dino_y))  # 충돌 시 이미지 변경
+                pygame.display.update()  # 변경된 이미지 업데이트
+                pygame.time.delay(2000)
                 game_active = False
 
             # 이벤트 체크 및 점프 처리
@@ -110,7 +118,7 @@ def main():
             screen.blit(game_over_text, (MAX_WIDTH // 2 - 50, MAX_HEIGHT // 2-40))
             final_score_text = font.render(f"Final Score: {score}", True, (0, 0, 0))
             screen.blit(final_score_text, (MAX_WIDTH // 2 - 60, MAX_HEIGHT // 2-10))
-            restart_text = font.render("If you want RESTART, Press SpaceBar!", True, (255,0,0))
+            restart_text = font.render("If you want RESTART, Press R!", True, (255,0,0))
             screen.blit(restart_text, (MAX_WIDTH // 2-170, MAX_HEIGHT // 2+20))
             
             # 게임 오버 상태에서의 이벤트 처리
@@ -119,7 +127,7 @@ def main():
                     pygame.quit()
                     sys.exit()
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_SPACE:
+                    if event.key == pygame.K_r:
                         # 게임 재시작
                         game_active = True
                         score = 0
