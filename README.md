@@ -4,7 +4,7 @@
     -전남대학교 오픈소스 활용 수업 기말 텀 프로젝트:
     OpenCV, MediaPipe, Pygame 등을 이용한 공룡 게임 제작
 
-    게임의 목표:
+    목표:
     1. 손동작을 인식한다.
     2. 왼손을 주먹쥐면 점프, 오른손을 주먹쥐면 숙이기로 구현한다.
     3. 사용자의 얼굴을 가져와 Dino의 얼굴에 대입한다.
@@ -30,3 +30,20 @@
     6. PR을 받은 다른 협업자는 확인후 리뷰를 작성하고 Develop 브랜치에 Merge하는 것을 승인한다.
     7. 1-5번을 이어간다.
 
+5. **게임 코드 README:**
+    https://code-projects.org/dino-game-in-python-with-source-code/
+    DINO RUN GAME IN PYTHON
+    - pygame module requried
+    Developed By Rohit Ravikant 
+
+    ***** IF YOU FIND ANY ERRORS OR ANY PROBLEMS RELATED THIS PROGRAM, FEEL FREE TO CONTACT US *****  
+
+
+    ***** LEAVE A COMMENT IF YOU LOVED OUR WORK *****
+
+
+    ***** FOR MORE PROJECTS :- https://code-projects.org/ *****
+
+
+
+    #THANK YOU FOR DOWNLOADING
