@@ -4,6 +4,9 @@ import os
 import sys
 import pygame
 import random
+import speech_recognition as sr
+import threading
+import queue
 from pygame import *
 
 pygame.init()
@@ -17,6 +20,9 @@ white = (255,255,255)
 background_col = (235,235,235)
 
 high_score = 0
+gamespeed = 4
+is_running = False
+thread = None         #전역변수로 설정
 
 screen = pygame.display.set_mode(scr_size)
 clock = pygame.time.Clock()
@@ -25,6 +31,43 @@ pygame.display.set_caption("Dino Run ")
 jump_sound = pygame.mixer.Sound('sprites/jump.wav')
 die_sound = pygame.mixer.Sound('sprites/die.wav')
 checkPoint_sound = pygame.mixer.Sound('sprites/checkPoint.wav')
+
+command_queue = queue.Queue()
+
+
+
+#----------------음성 인식 코드
+def listen_for_commands():
+    global gamespeed
+    global is_running
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        while is_running:
+            try:
+                print("음성 인식 대기중...")  # 음성 인식을 기다리고 있다는 것을 나타내기 위해
+                audio = r.listen(source, timeout=5)
+                command = r.recognize_google(audio, language="ko-KR").lower()
+                print("인식된 명령:", command)  # 인식된 명령 출력
+                print(gamespeed)
+                command_queue.put(command)
+            except sr.UnknownValueError:
+                print("인식할 수 없는 음성")
+            except sr.RequestError as e:
+                print("요청 오류:", e)
+        
+    print("음성 인식 종료")
+
+def start_voice_recognition():
+    global thread
+    global is_running
+    if not is_running:
+        is_running= True
+        print("Hi") #실행이 되는 지 확인하기위한 디버깅
+        thread = threading.Thread(target=listen_for_commands)
+        thread.daemon = True #daemon을 하면 main thread인 게임이 종료되면 서브 thread인 음성인식도 종료되게 설정
+        thread.start()
+#----------------음성 인식 코드
+
 
 def load_image(
     name,
@@ -293,6 +336,9 @@ class Scoreboard():
 
 
 def introscreen():
+
+    global is_running
+
     temp_dino = Dino(44,47)
     temp_dino.isBlinking = True
     gameStart = False
@@ -304,7 +350,18 @@ def introscreen():
     logo,logo_rect = load_image('logo.png',300,140,-1)
     logo_rect.centerx = width*0.6
     logo_rect.centery = height*0.6
+
+    start_voice_recognition() #음성 인식 시작
+
     while not gameStart:
+
+        command = None
+        # 음성 명령 처리
+        if not command_queue.empty():
+            command = command_queue.get()
+        if command == "시작":
+            gameStart = True
+
         if pygame.display.get_surface() == None:
             print("Couldn't load display surface")
             return True
@@ -334,8 +391,9 @@ def introscreen():
             gameStart = True
 
 def gameplay():
-    global high_score
-    gamespeed = 4
+    global high_score, gamespeed, is_running, thread
+    command_queue.queue.clear() # 음성인식이 들어있는 큐 clear
+    gamespeed= 4
     startMenu = False
     gameOver = False
     gameQuit = False
@@ -344,7 +402,7 @@ def gameplay():
     scb = Scoreboard()
     highsc = Scoreboard(width*0.78)
     counter = 0
-
+    
     cacti = pygame.sprite.Group()
     pteras = pygame.sprite.Group()
     clouds = pygame.sprite.Group()
@@ -368,9 +426,14 @@ def gameplay():
     HI_rect.left = width*0.73
 
     while not gameQuit:
+        command = None
+        # 음성 명령 처리          
+        
         while startMenu:
             pass
         while not gameOver:
+
+            
             if pygame.display.get_surface() == None:
                 print("Couldn't load display surface")
                 gameQuit = True
@@ -451,7 +514,6 @@ def gameplay():
 
                 pygame.display.update()
             clock.tick(FPS)
-
             if playerDino.isDead:
                 gameOver = True
                 if playerDino.score > high_score:
@@ -461,9 +523,23 @@ def gameplay():
                 new_ground.speed -= 1
                 gamespeed += 1
 
+            if not command_queue.empty(): #한 번만 실행되어야 하는데, 계속 인식되어 실행이 되어버림
+                command = command_queue.get()
+
+            if command == "빠르게":
+                gamespeed += 0.5  # 게임 속도 증가
+                new_ground.speed -= 0.5 #땅의 속도도 맞춰준다.
+                break  # 따라서 break를 넣어 명령어를 처리하고 반복문을 빠져나옴
+            
+            elif command == "느리게":
+                gamespeed = max(4, gamespeed - 0.5)  # 게임 속도 감소, 1 이하로 내려가지 않도록 함
+                new_ground.speed =min(-4, new_ground.speed +0.5) #땅의 속도도 맞춰준다.
+                break  # 따라서 break를 넣어 명령어를 처리하고 반복문을 빠져나옴
+
             counter = (counter + 1)
 
         if gameQuit:
+            is_running=False #음성 인식 종료
             break
 
         while gameOver:
@@ -476,6 +552,12 @@ def gameplay():
                     if event.type == pygame.QUIT:
                         gameQuit = True
                         gameOver = False
+
+                    if not command_queue.empty():
+                        command = command_queue.get()
+                        if command == "시작":
+                            gameOver = False
+                            gameplay()         # 게임 오버시 '시작'이라고 음성인식 한다면 게임 재시작
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
                             gameQuit = True
