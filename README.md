@@ -8,14 +8,17 @@
     1. 손동작을 인식한다.
     2. 왼손을 주먹쥐면 점프, 오른손을 주먹쥐면 숙이기로 구현한다.
     3. 사용자의 얼굴을 가져와 Dino의 얼굴에 대입한다.
+    4. 음성인식 오픈소스인 SpeechRecognition을 활용하여 '시작'이라고 음성으로 입력하면 게임이 자동으로 시작되고,
+        게임 도중 '빠르게' 또는 '느리게'라고 입력하면, 게임의 속도를 조절할 수 있도록 한다.
     
+    프로젝트를 통합하는 작업은 Thread, Global 변수를 활용해 변수의 값을 받아와 활용할 예정이다. 
+
 2. **설치 가이드:**
-    MediaPipe, OpenCV, Pygame, Numpy를 다운해야한다.
+    MediaPipe, OpenCV, Pygame, Numpy, SpeechRecognition, pyaudio를 다운해야한다.
 
 3. **라이선스 정보:**
     현 오픈소스 중 가장 강한 라이선스는 LGPL, Apache 둘 중 하나를 선택해야 라이선스 충돌이 일어나지 않으므로
     배포하지 않으니 LGPL 라이선스를 선택했다. 그 내용은 LICENSE 파일을 확인한다.
-    또한 Pygame에서 사용된 Font인 Press start 2D 폰트의 라이선스는 font 파일에 존재한다.
 
 4. **GIT허브 사용법:**
     Develop 브랜치를 만들어 사용한다.
