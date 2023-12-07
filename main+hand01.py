@@ -610,12 +610,12 @@ def gameplay():
                             jump_sound.play()
                         playerDino.movement[1] = -1*playerDino.jumpSpeed
                     
-                if rightgesture == 0:  # 오른손 제스처가 '주먹'일 때
-                    if not (playerDino.isJumping and playerDino.isDead):
-                        playerDino.isDucking = True
+            if rightgesture == 0:  # 오른손 제스처가 '주먹'일 때
+                if not (playerDino.isJumping and playerDino.isDead):
+                    playerDino.isDucking = True
 
-                if rightgesture == 1:  # 오른손 제스처가 '보'를 표시할 때
-                    playerDino.isDucking = False
+            if rightgesture == 1:  # 오른손 제스처가 '보'를 표시할 때
+                playerDino.isDucking = False
 
 
             if pygame.display.get_surface() == None:
