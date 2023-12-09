@@ -42,9 +42,11 @@ command_queue = queue.Queue()
 ######################################## 얼굴인식 코드추가 
 cam_running = False
 cam_thread = None 
-gesture = None #h
+leftgesture = None
+rightgesture =None
 
 def cam_for_commands():
+    global leftgesture, rightgesture
     global cam_running
     global gesture #h
     while cam_running:
@@ -63,7 +65,7 @@ def cam_for_commands():
             face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.2)
 
             ################################h 손인식 추가
-            with mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.5, 
+            with mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.5, 
                     min_tracking_confidence=0.5) as hands: 
                 
                 hand_mook = False
@@ -76,55 +78,48 @@ def cam_for_commands():
                     ret, frame = cap.read()
                     if not ret:
                         break
+
                     frame = cv2.flip(frame, 1)
-
+        
                     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-                    results = face_detection.process(rgb_frame)
 
                     ############################# 손인식
                     result_track_hand = hands.process(rgb_frame)
-                    gesture = None
+                    results = face_detection.process(rgb_frame)
 
+
+                    leftgesture, rightgesture = None, None  # 왼손과 오른손 제스처 초기화
+                    
                     if result_track_hand.multi_hand_landmarks:
-                        hand_landmarks = result_track_hand.multi_hand_landmarks[0]
-                        finger_1 = False
-                        finger_2 = False
-                        finger_3 = False
-                        finger_4 = False
-                        finger_5 = False
+                        for hand_idx, hand_landmarks in enumerate(result_track_hand.multi_hand_landmarks):
+                        # 왼손인지 오른손인지 판별
+                            hand_type = "Right" if result_track_hand.multi_handedness[hand_idx].classification[0].label == "Right" else "Left"
+                        
+                            # 각 손가락의 위치에 따라 제스처 결정
+                            finger_1 = hand_landmarks.landmark[4].y < hand_landmarks.landmark[2].y
+                            finger_2 = hand_landmarks.landmark[8].y < hand_landmarks.landmark[6].y
+                            finger_3 = hand_landmarks.landmark[12].y < hand_landmarks.landmark[10].y
+                            finger_4 = hand_landmarks.landmark[16].y < hand_landmarks.landmark[14].y
+                            finger_5 = hand_landmarks.landmark[20].y < hand_landmarks.landmark[18].y
 
-                        if hand_landmarks.landmark[4].y < hand_landmarks.landmark[2].y:
-                            finger_1 = True
-                        if hand_landmarks.landmark[8].y < hand_landmarks.landmark[6].y:
-                            finger_2 = True
-                        if hand_landmarks.landmark[12].y < hand_landmarks.landmark[10].y:
-                            finger_3 = True
-                        if hand_landmarks.landmark[16].y < hand_landmarks.landmark[14].y:
-                            finger_4 = True
-                        if hand_landmarks.landmark[20].y < hand_landmarks.landmark[18].y:
-                            finger_5 = True
-                        
-                        if finger_1 and finger_2 and finger_3 and finger_4 and finger_5:
-                            gesture = 1 # 보
-                            
-                            if not hand_phaa:
-                                hand_phaa = True
-                                hand_phaa_start_time = time.time()
-                        elif not finger_2 and not finger_3 and not finger_4 and not finger_5:
-                            gesture = 0 # 묵
+                            # 주먹(0)과 모든 손가락을 펼친 경우(1)를 판단
+                            if not any([finger_2, finger_3, finger_4, finger_5]):
+                                gesture = 0  # 주먹
+                            elif all([finger_1, finger_2, finger_3, finger_4, finger_5]):
+                                gesture = 1  # 모든 손가락을 펼침
+                            else:
+                                gesture = None
 
-                            if not hand_mook:
-                                hand_mook = True
-                                hand_mook_start_time = time.time()
+                            # 왼손과 오른손에 따라 제스처 값 할당
+                            if hand_type == "Left":
+                                leftgesture = gesture
+                            else:
+                                rightgesture = gesture
                         
-                        else :
-                            gesture = None
-                        
-                        if hand_mook and (2 <= (time.time() - hand_mook_start_time) <= 5):
-                            hand_mook = False
-                        if hand_phaa and (2 <= (time.time() - hand_phaa_start_time) <= 5):
-                            hand_phaa = False
+                            if hand_mook and (2 <= (time.time() - hand_mook_start_time) <= 5):
+                                hand_mook = False
+                            if hand_phaa and (2 <= (time.time() - hand_phaa_start_time) <= 5):
+                                hand_phaa = False
                         
 
 ##############################################################손인식 여기까지
@@ -159,7 +154,9 @@ def cam_for_commands():
 
                     if time.time() - last_save_time >= 1:############## 저장 시간 간격 변경가능
                         cv2.imwrite(file_name, result_face)
-                        print(f"{gesture} 제스처값 => 0:묵 , 1:빠") #########임시코드(삭제예정)
+                        
+                        print(f"{leftgesture} 왼손제스처값 => 0:묵 , 1:빠") #########임시코드(삭제예정)
+                        print(f"{rightgesture} 오른손제스처값 => 0:묵 , 1:빠") #########임시코드(삭제예정)
                         #print(f"{file_name} 이미지가 저장되었습니다.") 
                         
                         last_save_time = time.time()
@@ -512,7 +509,6 @@ class Scoreboard():
 def introscreen():
 
     global is_running
-
     temp_dino = Dino(44,47)
     temp_dino.isBlinking = True
     gameStart = False
@@ -566,7 +562,7 @@ def introscreen():
             gameStart = True
 
 def gameplay():
-    global high_score, gamespeed, is_running, thread
+    global high_score, gamespeed, is_running, thread, leftgesture, rightgesture
     command_queue.queue.clear() # 음성인식이 들어있는 큐 clear
     gamespeed= 4
     startMenu = False
@@ -607,6 +603,20 @@ def gameplay():
         while startMenu:
             pass
         while not gameOver:
+            if leftgesture == 0:  # 왼손 제스처가 '주먹'일 때
+                if playerDino.rect.bottom == int(0.98*height):
+                        playerDino.isJumping = True
+                        if pygame.mixer.get_init() != None:
+                            jump_sound.play()
+                        playerDino.movement[1] = -1*playerDino.jumpSpeed
+                    
+            if rightgesture == 0:  # 오른손 제스처가 '주먹'일 때
+                if not (playerDino.isJumping and playerDino.isDead):
+                    playerDino.isDucking = True
+
+            if rightgesture == 1:  # 오른손 제스처가 '보'를 표시할 때
+                playerDino.isDucking = False
+
 
             if pygame.display.get_surface() == None:
                 print("Couldn't load display surface")
@@ -619,14 +629,14 @@ def gameplay():
                         gameOver = True
 
                     if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_SPACE : #h3space
+                        if event.key == pygame.K_SPACE  : #h3space
                             if playerDino.rect.bottom == int(0.98*height):
                                 playerDino.isJumping = True
                                 if pygame.mixer.get_init() != None:
                                     jump_sound.play()
                                 playerDino.movement[1] = -1*playerDino.jumpSpeed
 
-                        if event.key == pygame.K_DOWN : #h2down
+                        if event.key == pygame.K_DOWN: #h2down
                             if not (playerDino.isJumping and playerDino.isDead):
                                 playerDino.isDucking = True
 
