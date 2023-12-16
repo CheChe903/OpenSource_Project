@@ -9,7 +9,16 @@ import threading
 import queue
 from pygame import *
 
+import time ############### 추가된 오픈소스 및 라이브러리
+import cv2 ################
+import numpy as np ########
+import mediapipe as mp ####
+
+
+
 pygame.init()
+
+font = pygame.font.Font('./font/PressStart2P-Regular.ttf', 12) # PressStart2P 폰트 지정
 
 scr_size = (width,height) = (600,150)
 FPS = 60
@@ -21,9 +30,9 @@ background_col = (235,235,235)
 
 high_score = 0
 gamespeed = 4
-is_running = False
-thread = None         #전역변수로 설정
-
+is_running = False 
+thread = None         
+results=False
 screen = pygame.display.set_mode(scr_size)
 clock = pygame.time.Clock()
 pygame.display.set_caption("Dino Run ")
@@ -34,20 +43,166 @@ checkPoint_sound = pygame.mixer.Sound('sprites/checkPoint.wav')
 
 command_queue = queue.Queue()
 
+######################################## 얼굴인식 코드추가 
+cam_running = False
+cam_thread = None 
+leftgesture = None
+rightgesture =None
+
+def cam_for_commands():
+    global leftgesture, rightgesture, results
+    global cam_running
+    global gesture #h
+    while cam_running:
+        try:
+            print("얼굴 인식 대기중...")
+
+
+            file_name = 'my_face.png' 
+            last_save_time = time.time()
+
+            mp_drawing = mp.solutions.drawing_utils #h
+            mp_hands = mp.solutions.hands#h
+
+            cap = cv2.VideoCapture(0)
+            mp_face_detection = mp.solutions.face_detection
+            face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.2)
+
+            ################################h 손인식 추가
+            with mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.5, 
+                    min_tracking_confidence=0.5) as hands: 
+                
+                hand_mook = False
+                hand_mook_start_time = 0  
+                
+                hand_phaa = False
+                hand_phaa_start_time = 0
+            #################################h
+                while cam_running:# 캠 온
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+
+                    frame = cv2.flip(frame, 1)
+        
+                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                    ############################# 손인식
+                    result_track_hand = hands.process(rgb_frame)
+                    results = face_detection.process(rgb_frame)
+
+
+                    leftgesture, rightgesture = None, None  # 왼손과 오른손 제스처 초기화
+                    
+                    if result_track_hand.multi_hand_landmarks:
+                        for hand_idx, hand_landmarks in enumerate(result_track_hand.multi_hand_landmarks):
+                        # 왼손인지 오른손인지 판별
+                            hand_type = "Right" if result_track_hand.multi_handedness[hand_idx].classification[0].label == "Right" else "Left"
+                        
+                            # 각 손가락의 위치에 따라 제스처 결정
+                            finger_1 = hand_landmarks.landmark[4].y < hand_landmarks.landmark[2].y
+                            finger_2 = hand_landmarks.landmark[8].y < hand_landmarks.landmark[6].y
+                            finger_3 = hand_landmarks.landmark[12].y < hand_landmarks.landmark[10].y
+                            finger_4 = hand_landmarks.landmark[16].y < hand_landmarks.landmark[14].y
+                            finger_5 = hand_landmarks.landmark[20].y < hand_landmarks.landmark[18].y
+
+                            # 주먹(0)과 모든 손가락을 펼친 경우(1)를 판단
+                            if not any([finger_2, finger_3, finger_4, finger_5]):
+                                gesture = 0  # 주먹
+                            elif all([finger_1, finger_2, finger_3, finger_4, finger_5]):
+                                gesture = 1  # 모든 손가락을 펼침
+                            else:
+                                gesture = None
+
+                            # 왼손과 오른손에 따라 제스처 값 할당
+                            if hand_type == "Left":
+                                leftgesture = gesture
+                            else:
+                                rightgesture = gesture
+                        
+                            if hand_mook and (2 <= (time.time() - hand_mook_start_time) <= 5):
+                                hand_mook = False
+                            if hand_phaa and (2 <= (time.time() - hand_phaa_start_time) <= 5):
+                                hand_phaa = False
+                        
+
+##############################################################손인식 여기까지
+
+
+
+                    if results.detections:
+                        for detection in results.detections:
+                            bboxC = detection.location_data.relative_bounding_box
+                            ih, iw, _ = frame.shape
+                            x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), \
+                                        int(bboxC.width * iw), int(bboxC.height * ih)
+
+                            face_region = frame[y:y + h, x:x + w]
+
+                            face_region = cv2.resize(face_region, (150, 150)) # fixel 크기
+
+                            center = (x + w // 2, y + h // 2)
+                            radius = min(w // 2, h // 2)  
+                            mask = np.zeros_like(face_region)
+                            cv2.circle(mask, (75, 75),75, (255, 255, 255), -1)  # (fixel 크기 절반)
+
+                            antiresult_face = cv2.bitwise_and(face_region, mask)
+                            tmp = cv2.cvtColor(antiresult_face, cv2.COLOR_BGR2GRAY)
+                            _,alpha = cv2.threshold(tmp,0,255,cv2.THRESH_BINARY)
+
+                            b, g, r = cv2.split(antiresult_face)
+                            rgba = [b,g,r, alpha]
+                            result_face = cv2.merge(rgba,4) 
+
+                    frame_resized = cv2.resize(frame, (400, 300))
+                    cv2.imshow("Your Face Tracking", frame_resized) #=> 화면에 출력할 필요없음
+
+                    if time.time() - last_save_time >= 0.51:############## 저장 시간 간격 변경가능
+                        cv2.imwrite(file_name, result_face)
+                        
+                        #print(f"왼손 :{leftgesture}_____오른손 : {rightgesture} 0:묵 , 1:빠") #########임시코드(삭제예정)
+                        #print(f"{rightgesture} 오른손제스처값 => 0:묵 , 1:빠") #########임시코드(삭제예정)
+                        #print(f"{file_name} 이미지가 저장되었습니다.") 
+                        
+                        last_save_time = time.time()
+                    
+                    if cv2.waitKey(1) & 0xFF == 27: # ESC 키를 누르면 종료
+                        break
+
+            cap.release()
+            cv2.destroyAllWindows()
+        except Exception as e:
+            print("얼굴 인식 오류:", e)
+
+    print("얼굴 인식 종료")
+
+def start_cam_recognition():
+    global cam_thread
+    global cam_running
+    if not cam_running: 
+        cam_running= True 
+        print("cam_hi") 
+        cam_thread = threading.Thread(target=cam_for_commands) #캠인식프로그램 실행 
+        cam_thread.daemon = True # main thread 종료시 얼굴인식 쓰레드도 종료
+        cam_thread.start()
+
+######################################## 얼굴인식 코드 끝
+
+
 
 
 #----------------음성 인식 코드
 def listen_for_commands():
     global gamespeed
-    global is_running
+    global is_running 
     r = sr.Recognizer()
     with sr.Microphone() as source:
         while is_running:
             try:
-                print("음성 인식 대기중...")  # 음성 인식을 기다리고 있다는 것을 나타내기 위해
-                audio = r.listen(source, timeout=5)
+                print("음성 인식 대기중...")  
+                audio = r.listen(source, timeout=10)
                 command = r.recognize_google(audio, language="ko-KR").lower()
-                print("인식된 명령:", command)  # 인식된 명령 출력
+                print("인식된 명령:", command)  
                 print(gamespeed)
                 command_queue.put(command)
             except sr.UnknownValueError:
@@ -58,13 +213,13 @@ def listen_for_commands():
     print("음성 인식 종료")
 
 def start_voice_recognition():
-    global thread
-    global is_running
-    if not is_running:
+    global thread 
+    global is_running 
+    if not is_running: 
         is_running= True
-        print("Hi") #실행이 되는 지 확인하기위한 디버깅
+        print("Hi") 
         thread = threading.Thread(target=listen_for_commands)
-        thread.daemon = True #daemon을 하면 main thread인 게임이 종료되면 서브 thread인 음성인식도 종료되게 설정
+        thread.daemon = True
         thread.start()
 #----------------음성 인식 코드
 
@@ -159,6 +314,11 @@ class Dino():
     def __init__(self,sizex=-1,sizey=-1):
         self.images,self.rect = load_sprite_sheet('dino.png',5,1,sizex,sizey,-1)
         self.images1,self.rect1 = load_sprite_sheet('dino_ducking.png',2,1,59,sizey,-1)
+        self.my_face_image = None
+        self.last_update_time = time.time() #######
+        self.update_interval = 0.5            ##### 업데이트 간격조절
+        
+
         self.rect.bottom = int(0.98*height)
         self.rect.left = width/15
         self.image = self.images[0]
@@ -174,9 +334,28 @@ class Dino():
 
         self.stand_pos_width = self.rect.width
         self.duck_pos_width = self.rect1.width
+    
+    def update_my_face(self): ########################## 얼굴인식데이터 업데이트 내용
+        current_time = time.time()
+        if current_time - self.last_update_time > self.update_interval:
+            if os.path.exists("my_face.png"):  # 파일 존재 확인
+                self.my_face_image = pygame.image.load("my_face.png")
+                self.my_face_image = pygame.transform.scale(self.my_face_image, (20, 20))
+                self.last_update_time = current_time
+            else:
+                self.my_face_image = pygame.image.load("my_face2.png")
 
     def draw(self):
         screen.blit(self.image,self.rect)
+        self.update_my_face() #######################얼굴인식데이터 업데이트실행
+        if self.my_face_image:
+
+            if not self.isDucking:
+                # 서있는 상태에서는 my_face 이미지를 Dino 위에 그리기
+                screen.blit(self.my_face_image.convert_alpha(), (self.rect.left + 20, self.rect.top + 4))
+            else:
+                # 앉아 있는 상태에서는 my_face 이미지를 Dino 위에 그리기
+                screen.blit(self.my_face_image.convert_alpha(), (self.rect.left + 36, self.rect.bottom - 30))
 
     def checkbounds(self):
         if self.rect.bottom > int(0.98*height):
@@ -224,6 +403,9 @@ class Dino():
                     checkPoint_sound.play()
 
         self.counter = (self.counter + 1)
+
+    def is_jumping(self):
+        return self.isJumping
 
 class Cactus(pygame.sprite.Sprite):
     def __init__(self,speed=5,sizex=-1,sizey=-1):
@@ -337,8 +519,7 @@ class Scoreboard():
 
 def introscreen():
 
-    global is_running
-
+    global is_running, cam_running, results
     temp_dino = Dino(44,47)
     temp_dino.isBlinking = True
     gameStart = False
@@ -352,14 +533,24 @@ def introscreen():
     logo_rect.centery = height*0.6
 
     start_voice_recognition() #음성 인식 시작
+    start_cam_recognition() ########################### 캠시작
+
+    voice_recognition_started = False # 음성 인식 시작했다는 것을 표시하기 위한 bool 변수 
+    cam_recognition_started = False # 음성 인식 시작했다는 것을 표시하기 위한 bool 변수
 
     while not gameStart:
 
+        if is_running and not voice_recognition_started:
+            voice_recognition_started = True
+
+        if results and not cam_recognition_started:
+            cam_recognition_started = True
+            
         command = None
         # 음성 명령 처리
         if not command_queue.empty():
             command = command_queue.get()
-        if command == "시작":
+        if command == "시작" and is_running and results:
             gameStart = True
 
         if pygame.display.get_surface() == None:
@@ -370,15 +561,36 @@ def introscreen():
                 if event.type == pygame.QUIT:
                     return True
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_SPACE or event.key == pygame.K_UP:
+                    if event.key == pygame.K_SPACE or event.key == pygame.K_UP :
                         temp_dino.isJumping = True
                         temp_dino.isBlinking = False
                         temp_dino.movement[1] = -1*temp_dino.jumpSpeed
+
+        if cam_running:
+            if leftgesture == 0 and not temp_dino.is_jumping():  # 왼손 주먹 제스처
+                temp_dino.isJumping = True
+                temp_dino.movement[1] = -1*temp_dino.jumpSpeed
+
+            if rightgesture == 0:  # 오른손 주먹 제스처
+                temp_dino.isDucking = True
+
+            if rightgesture == 1:  # 오른손 펼침 제스처
+                temp_dino.isDucking = False
 
         temp_dino.update()
 
         if pygame.display.get_surface() != None:
             screen.fill(background_col)
+            if voice_recognition_started:
+                # 텍스트 렌더링
+                voice_text = font.render('VOICE RECOGNITION', True, (255, 0, 0))
+                screen.blit(voice_text, (50, 10))
+
+            if cam_recognition_started:
+                # 텍스트 렌더링
+                cam_text = font.render('CAM RECOGNITION', True, (255, 50, 0))
+                screen.blit(cam_text, (320, 10))
+            
             screen.blit(temp_ground[0],temp_ground_rect)
             if temp_dino.isBlinking:
                 screen.blit(logo,logo_rect)
@@ -391,7 +603,7 @@ def introscreen():
             gameStart = True
 
 def gameplay():
-    global high_score, gamespeed, is_running, thread
+    global high_score, gamespeed, is_running, thread, leftgesture, rightgesture
     command_queue.queue.clear() # 음성인식이 들어있는 큐 clear
     gamespeed= 4
     startMenu = False
@@ -428,12 +640,25 @@ def gameplay():
     while not gameQuit:
         command = None
         # 음성 명령 처리          
-        
+
         while startMenu:
             pass
         while not gameOver:
+            if leftgesture == 0:  # 왼손 제스처가 '주먹'일 때
+                if playerDino.rect.bottom == int(0.98*height):
+                        playerDino.isJumping = True
+                        if pygame.mixer.get_init() != None:
+                            jump_sound.play()
+                        playerDino.movement[1] = -1*playerDino.jumpSpeed
+                    
+            if rightgesture == 0:  # 오른손 제스처가 '주먹'일 때
+                if not (playerDino.isJumping and playerDino.isDead):
+                    playerDino.isDucking = True
 
-            
+            if rightgesture == 1:  # 오른손 제스처가 '보'를 표시할 때
+                playerDino.isDucking = False
+
+
             if pygame.display.get_surface() == None:
                 print("Couldn't load display surface")
                 gameQuit = True
@@ -445,19 +670,19 @@ def gameplay():
                         gameOver = True
 
                     if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_SPACE:
+                        if event.key == pygame.K_SPACE  : #h3space
                             if playerDino.rect.bottom == int(0.98*height):
                                 playerDino.isJumping = True
                                 if pygame.mixer.get_init() != None:
                                     jump_sound.play()
                                 playerDino.movement[1] = -1*playerDino.jumpSpeed
 
-                        if event.key == pygame.K_DOWN:
+                        if event.key == pygame.K_DOWN: #h2down
                             if not (playerDino.isJumping and playerDino.isDead):
                                 playerDino.isDucking = True
 
                     if event.type == pygame.KEYUP:
-                        if event.key == pygame.K_DOWN:
+                        if event.key == pygame.K_DOWN : #h2down
                             playerDino.isDucking = False
             for c in cacti:
                 c.movement[0] = -1*gamespeed
@@ -527,19 +752,20 @@ def gameplay():
                 command = command_queue.get()
 
             if command == "빠르게":
-                gamespeed += 0.5  # 게임 속도 증가
-                new_ground.speed -= 0.5 #땅의 속도도 맞춰준다.
+                gamespeed += 1  # 게임 속도 증가
+                new_ground.speed += 1 #땅의 속도도 맞춰준다.
                 break  # 따라서 break를 넣어 명령어를 처리하고 반복문을 빠져나옴
             
             elif command == "느리게":
-                gamespeed = max(4, gamespeed - 0.5)  # 게임 속도 감소, 1 이하로 내려가지 않도록 함
-                new_ground.speed =min(-4, new_ground.speed +0.5) #땅의 속도도 맞춰준다.
+                gamespeed = max(4, gamespeed - 1)  # 게임 속도 감소, 1 이하로 내려가지 않도록 함
+                new_ground.speed =min(-4, new_ground.speed -1) #땅의 속도도 맞춰준다.
                 break  # 따라서 break를 넣어 명령어를 처리하고 반복문을 빠져나옴
 
             counter = (counter + 1)
 
         if gameQuit:
             is_running=False #음성 인식 종료
+            cam_running =False  ############################### 캠 종료
             break
 
         while gameOver:
@@ -548,22 +774,24 @@ def gameplay():
                 gameQuit = True
                 gameOver = False
             else:
+
+                if not command_queue.empty():
+                    command = command_queue.get()
+                    if command == "시작":
+                        gameOver = False
+                        gameplay()         # 게임 오버시 '시작'이라고 음성인식 한다면 게임 재시작
+
+                        
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         gameQuit = True
                         gameOver = False
-
-                    if not command_queue.empty():
-                        command = command_queue.get()
-                        if command == "시작":
-                            gameOver = False
-                            gameplay()         # 게임 오버시 '시작'이라고 음성인식 한다면 게임 재시작
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
                             gameQuit = True
                             gameOver = False
 
-                        if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                        if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE : #h3space
                             gameOver = False
                             gameplay()
             highsc.update(high_score)
