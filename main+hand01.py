@@ -14,7 +14,11 @@ import cv2 ################
 import numpy as np ########
 import mediapipe as mp ####
 
+
+
 pygame.init()
+
+font = pygame.font.Font('./font/PressStart2P-Regular.ttf', 12) # PressStart2P 폰트 지정
 
 scr_size = (width,height) = (600,150)
 FPS = 60
@@ -28,7 +32,7 @@ high_score = 0
 gamespeed = 4
 is_running = False 
 thread = None         
-
+results=False
 screen = pygame.display.set_mode(scr_size)
 clock = pygame.time.Clock()
 pygame.display.set_caption("Dino Run ")
@@ -46,7 +50,7 @@ leftgesture = None
 rightgesture =None
 
 def cam_for_commands():
-    global leftgesture, rightgesture
+    global leftgesture, rightgesture, results
     global cam_running
     global gesture #h
     while cam_running:
@@ -195,7 +199,7 @@ def listen_for_commands():
         while is_running:
             try:
                 print("음성 인식 대기중...")  
-                audio = r.listen(source, timeout=5)
+                audio = r.listen(source, timeout=60)
                 command = r.recognize_google(audio, language="ko-KR").lower()
                 print("인식된 명령:", command)  
                 print(gamespeed)
@@ -309,8 +313,7 @@ class Dino():
     def __init__(self,sizex=-1,sizey=-1):
         self.images,self.rect = load_sprite_sheet('dino.png',5,1,sizex,sizey,-1)
         self.images1,self.rect1 = load_sprite_sheet('dino_ducking.png',2,1,59,sizey,-1)
-        self.my_face_image = pygame.image.load("my_face.png") ######### 얼굴인식데이터 합성코드
-        self.my_face_image = pygame.transform.scale(self.my_face_image, (20, 20)) #####크기조절
+        self.my_face_image = None
         self.last_update_time = time.time() #######
         self.update_interval = 0.5            ##### 업데이트 간격조절
         
@@ -334,20 +337,24 @@ class Dino():
     def update_my_face(self): ########################## 얼굴인식데이터 업데이트 내용
         current_time = time.time()
         if current_time - self.last_update_time > self.update_interval:
-            self.my_face_image = pygame.image.load("my_face.png")
-            self.my_face_image = pygame.transform.scale(self.my_face_image, (20, 20))
-            self.last_update_time = current_time ###################
+            if os.path.exists("my_face.png"):  # 파일 존재 확인
+                self.my_face_image = pygame.image.load("my_face.png")
+                self.my_face_image = pygame.transform.scale(self.my_face_image, (20, 20))
+                self.last_update_time = current_time
+            else:
+                self.my_face_image = None
 
     def draw(self):
         screen.blit(self.image,self.rect)
-        self.update_my_face() #######################얼굴인식데이터 업데이트실행
+        #self.update_my_face() #######################얼굴인식데이터 업데이트실행
+        if self.my_face_image:
 
-        if not self.isDucking:
-            # 서있는 상태에서는 my_face 이미지를 Dino 위에 그리기
-            screen.blit(self.my_face_image.convert_alpha(), (self.rect.left + 20, self.rect.top - 0))
-        else:
-            # 앉아 있는 상태에서는 my_face 이미지를 Dino 위에 그리기
-            screen.blit(self.my_face_image.convert_alpha(), (self.rect.left + 40, self.rect.bottom - 30))
+            if not self.isDucking:
+                # 서있는 상태에서는 my_face 이미지를 Dino 위에 그리기
+                screen.blit(self.my_face_image.convert_alpha(), (self.rect.left + 20, self.rect.top - 0))
+            else:
+                # 앉아 있는 상태에서는 my_face 이미지를 Dino 위에 그리기
+                screen.blit(self.my_face_image.convert_alpha(), (self.rect.left + 40, self.rect.bottom - 30))
 
     def checkbounds(self):
         if self.rect.bottom > int(0.98*height):
@@ -395,6 +402,9 @@ class Dino():
                     checkPoint_sound.play()
 
         self.counter = (self.counter + 1)
+
+    def is_jumping(self):
+        return self.isJumping
 
 class Cactus(pygame.sprite.Sprite):
     def __init__(self,speed=5,sizex=-1,sizey=-1):
@@ -508,7 +518,7 @@ class Scoreboard():
 
 def introscreen():
 
-    global is_running
+    global is_running, cam_running, results
     temp_dino = Dino(44,47)
     temp_dino.isBlinking = True
     gameStart = False
@@ -524,13 +534,22 @@ def introscreen():
     start_voice_recognition() #음성 인식 시작
     start_cam_recognition() ########################### 캠시작
 
+    voice_recognition_started = False # 음성 인식 시작했다는 것을 표시하기 위한 bool 변수 
+    cam_recognition_started = False # 음성 인식 시작했다는 것을 표시하기 위한 bool 변수
+
     while not gameStart:
 
+        if is_running and not voice_recognition_started:
+            voice_recognition_started = True
+
+        if results and not cam_recognition_started:
+            cam_recognition_started = True
+            
         command = None
         # 음성 명령 처리
         if not command_queue.empty():
             command = command_queue.get()
-        if command == "시작":
+        if command == "시작" and is_running and results:
             gameStart = True
 
         if pygame.display.get_surface() == None:
@@ -546,10 +565,31 @@ def introscreen():
                         temp_dino.isBlinking = False
                         temp_dino.movement[1] = -1*temp_dino.jumpSpeed
 
+        if cam_running:
+            if leftgesture == 0 and not temp_dino.is_jumping():  # 왼손 주먹 제스처
+                temp_dino.isJumping = True
+                temp_dino.movement[1] = -1*temp_dino.jumpSpeed
+
+            if rightgesture == 0:  # 오른손 주먹 제스처
+                temp_dino.isDucking = True
+
+            if rightgesture == 1:  # 오른손 펼침 제스처
+                temp_dino.isDucking = False
+
         temp_dino.update()
 
         if pygame.display.get_surface() != None:
             screen.fill(background_col)
+            if voice_recognition_started:
+                # 텍스트 렌더링
+                voice_text = font.render('VOICE RECOGNITION', True, (255, 0, 0))
+                screen.blit(voice_text, (50, 10))
+
+            if cam_recognition_started:
+                # 텍스트 렌더링
+                cam_text = font.render('CAM RECOGNITION', True, (255, 50, 0))
+                screen.blit(cam_text, (320, 10))
+            
             screen.blit(temp_ground[0],temp_ground_rect)
             if temp_dino.isBlinking:
                 screen.blit(logo,logo_rect)
@@ -733,16 +773,18 @@ def gameplay():
                 gameQuit = True
                 gameOver = False
             else:
+
+                if not command_queue.empty():
+                    command = command_queue.get()
+                    if command == "시작":
+                        gameOver = False
+                        gameplay()         # 게임 오버시 '시작'이라고 음성인식 한다면 게임 재시작
+
+                        
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         gameQuit = True
                         gameOver = False
-
-                    if not command_queue.empty():
-                        command = command_queue.get()
-                        if command == "시작":
-                            gameOver = False
-                            gameplay()         # 게임 오버시 '시작'이라고 음성인식 한다면 게임 재시작
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
                             gameQuit = True
